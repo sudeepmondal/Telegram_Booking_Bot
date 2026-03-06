@@ -3,7 +3,7 @@
 An AI-powered service booking chatbot built with n8n, Telegram, Groq AI (Free), and Google Sheets.
 
 ## 🔗 Live Demo
-Talk to the bot: [@your_bot_username](https://t.me/your_bot_username)
+Talk to the bot: [@myshopbooking_bot](https://web.telegram.org/k/#@myshopbooking_bot)
 
 ## 🛠️ Tech Stack
 | Tool | Purpose |
