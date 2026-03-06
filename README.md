@@ -118,7 +118,9 @@ Bot:   ✅ Booking Confirmed!
 
 ## 🔑 Environment Variables
 ```env
-TELEGRAM_BOT_TOKEN=your_token
-GROQ_API_KEY=your_groq_key  
-GOOGLE_SHEET_ID=your_sheet_id
+TELEGRAM_BOT_TOKEN=8237444554:AAHID2zivJVwDbI02HvIZdX9YXV7_UCWGnw
+GROQ_API_KEY=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
+GOOGLE_SHEET_ID=https://docs.google.com/spreadsheets/d/1jZuNN0UFhM4jR6v9h4kQ51nD-dOOkUiQrehNLdzDuas/edit?gid=0#gid=0
+PRODUCTS_SHEET_NAME=1jZuNN0UFhM4jR6v9h4kQ51nD-dOOkUiQrehNLdzDuas
+BOOKINGS_SHEET_NAME=1jZuNN0UFhM4jR6v9h4kQ51nD-dOOkUiQrehNLdzDuas
 ```
