@@ -1,0 +1,432 @@
+{
+  "name": "Telegram AI Booking System",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {}
+      },
+      "id": "8560d537-a928-4ec3-b58d-5542c85643b9",
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -1488,
+        144
+      ],
+      "webhookId": "telegram-webhook-001",
+      "credentials": {
+        "telegramApi": {
+          "id": "lw9cPyC4waa9uVgj",
+          "name": "Telegram Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const msg = $input.first().json;\nconst text = msg.message?.text || '';\nconst chatId = msg.message?.chat?.id;\nconst firstName = msg.message?.from?.first_name || 'Customer';\nconst userId = msg.message?.from?.id;\n\nreturn [{\n  json: {\n    text: text.trim(),\n    chatId: chatId.toString(),\n    firstName,\n    userId: userId.toString(),\n    messageId: msg.message?.message_id\n  }\n}];"
+      },
+      "id": "74887116-db0c-4a91-97ae-a02c06edd33b",
+      "name": "Extract Message Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1200,
+        144
+      ]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1jZuNN0UFhM4jR6v9h4kQ51nD-dOOkUiQrehNLdzDuas",
+          "mode": "id"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Products",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1jZuNN0UFhM4jR6v9h4kQ51nD-dOOkUiQrehNLdzDuas/edit#gid=0"
+        },
+        "options": {}
+      },
+      "id": "cbab068c-a9de-4236-abef-dbc8400de2e1",
+      "name": "Get Products from Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [
+        -928,
+        144
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "3ChaxYTCuBLPVyMr",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const products = $input.all();\nconst msg = $('Extract Message Data').first().json;\n\nlet productList = '';\nproducts.forEach((p, i) => {\n  const d = p.json;\n  if (d['Product Name']) {\n    productList += `${i+1}. ${d['Product Name']} - ${d['Description']} | Price: ${d['Price']} BDT | Available: ${d['Availability']} | Duration: ${d['Duration']}\\n`;\n  }\n});\n\nreturn [{\n  json: {\n    text: msg.text,\n    chatId: msg.chatId,\n    firstName: msg.firstName,\n    userId: msg.userId,\n    productList: productList || 'No products available currently.'\n  }\n}];"
+      },
+      "id": "dfd9d216-989e-44b0-922a-c45d5a3d966b",
+      "name": "Prepare AI Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -656,
+        144
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const groqResp = $input.first().json;\nconst aiMessage = groqResp.choices?.[0]?.message?.content || 'Sorry, please try again.';\nconst ctx = $('Prepare AI Context').first().json;\n\n// Try multiple regex patterns to catch AI response variations\nlet match = aiMessage.match(/BOOKING_CONFIRMED::\\s*[\\r\\n]+NAME::(.+)[\\r\\n]+EMAIL::(.+)[\\r\\n]+SERVICE::(.+)[\\r\\n]+DATE::(.+)[\\r\\n]+TIME::(.+)[\\r\\n]+::END_BOOKING/);\n\nif (!match) {\n  match = aiMessage.match(/NAME::(.+)\\nEMAIL::(.+)\\nSERVICE::(.+)\\nDATE::(.+)\\nTIME::(.+)/);\n}\n\nlet bookingData = null;\nlet cleanMessage = aiMessage;\n\nif (match) {\n  bookingData = {\n    NAME: match[1].trim(),\n    EMAIL: match[2].trim(),\n    SERVICE: match[3].trim(),\n    DATE: match[4].trim(),\n    TIME: match[5].trim(),\n    bookingId: 'BK' + Date.now().toString().slice(-6),\n    timestamp: new Date().toISOString()\n  };\n  cleanMessage = aiMessage.replace(/BOOKING_CONFIRMED::[\\s\\S]*?::END_BOOKING/, '').trim();\n  cleanMessage += '\\n\\n✅ *Booking Confirmed!*\\n📋 Booking ID: ' + bookingData.bookingId;\n}\n\nreturn [{\n  json: {\n    chatId: ctx.chatId,\n    aiMessage: cleanMessage,\n    hasBooking: bookingData !== null,\n    bookingData: bookingData || {},\n    firstName: ctx.firstName\n  }\n}];"
+      },
+      "id": "f8891708-5d52-479e-a72a-e082635c9e9e",
+      "name": "Parse AI Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -224,
+        144
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{$json.chatId}}",
+        "text": "={{$json.aiMessage}}",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "6c12d3eb-402d-4ca1-8198-e83c143fe5fa",
+      "name": "Send Telegram Reply",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        16,
+        -64
+      ],
+      "webhookId": "cd7e5685-17ce-4299-9339-40c9a4b17396",
+      "credentials": {
+        "telegramApi": {
+          "id": "lw9cPyC4waa9uVgj",
+          "name": "Telegram Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "https://docs.google.com/spreadsheets/d/1jZuNN0UFhM4jR6v9h4kQ51nD-dOOkUiQrehNLdzDuas/edit?gid=1158954859#gid=1158954859",
+          "mode": "url"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "Bookings",
+          "mode": "name"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Timestamp": "={{$('Parse AI Response').first().json.bookingData.timestamp}}",
+            "Customer Name": "={{$('Parse AI Response').first().json.bookingData.NAME}}",
+            "Email": "={{$('Parse AI Response').first().json.bookingData.EMAIL}}",
+            "Service": "={{$('Parse AI Response').first().json.bookingData.SERVICE}}",
+            "Date": "={{$('Parse AI Response').first().json.bookingData.DATE}}",
+            "Time": "={{$('Parse AI Response').first().json.bookingData.TIME}}",
+            "Booking ID": "={{$('Parse AI Response').first().json.bookingData.bookingId}}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Timestamp",
+              "displayName": "Timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Customer Name",
+              "displayName": "Customer Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Email",
+              "displayName": "Email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Service",
+              "displayName": "Service",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Date",
+              "displayName": "Date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Time",
+              "displayName": "Time",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Booking ID",
+              "displayName": "Booking ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "cellFormat": "USER_ENTERED",
+          "useAppend": true
+        }
+      },
+      "id": "fb152c48-57b6-4a32-b2f3-6f61ca939116",
+      "name": "Save Booking to Sheet",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.4,
+      "position": [
+        288,
+        352
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "3ChaxYTCuBLPVyMr",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "={{$('Parse AI Response').first().json.bookingData.EMAIL}}",
+        "subject": "=✅ Booking Confirmed - {{$('Parse AI Response').first().json.bookingData.SERVICE}} | ID: {{$('Parse AI Response').first().json.bookingData.bookingId}}",
+        "message": "=<!DOCTYPE html><html><body style='font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;background:#f5f5f5'><div style='background:white;border-radius:12px;padding:32px;box-shadow:0 2px 8px rgba(0,0,0,0.1)'><h1 style='color:#7c6eff;margin-bottom:4px'>✅ Booking Confirmed!</h1><p style='color:#666;margin-top:0'>Your appointment has been successfully booked.</p><hr style='border:1px solid #eee;margin:24px 0'><table style='width:100%;border-collapse:collapse'><tr><td style='padding:8px 0;color:#888;font-size:14px'>Customer Name</td><td style='padding:8px 0;font-weight:bold'>{{$('Parse AI Response').first().json.bookingData.NAME}}</td></tr><tr><td style='padding:8px 0;color:#888;font-size:14px'>Service</td><td style='padding:8px 0;font-weight:bold'>{{$('Parse AI Response').first().json.bookingData.SERVICE}}</td></tr><tr><td style='padding:8px 0;color:#888;font-size:14px'>Date</td><td style='padding:8px 0;font-weight:bold'>{{$('Parse AI Response').first().json.bookingData.DATE}}</td></tr><tr><td style='padding:8px 0;color:#888;font-size:14px'>Time</td><td style='padding:8px 0;font-weight:bold'>{{$('Parse AI Response').first().json.bookingData.TIME}}</td></tr><tr><td style='padding:8px 0;color:#888;font-size:14px'>Booking ID</td><td style='padding:8px 0;font-weight:bold;color:#7c6eff'>{{$('Parse AI Response').first().json.bookingData.bookingId}}</td></tr></table><hr style='border:1px solid #eee;margin:24px 0'><p style='color:#888;font-size:13px;text-align:center'>Thank you for choosing our service! 🙏</p></div></body></html>",
+        "options": {}
+      },
+      "id": "acf7b52c-512b-4cb4-b548-0dca86a384b0",
+      "name": "Send Confirmation Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        560,
+        352
+      ],
+      "webhookId": "06066ba8-2b01-454b-b697-f8ae48e369e8",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "ehwqYdp8zAEJkd7Q",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "6af9d768-7606-4431-b135-0a2f55e69015",
+              "leftValue": "={{ $('Parse AI Response').first().json.hasBooking }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        16,
+        368
+      ],
+      "id": "a7947eed-c6d9-4585-8488-9418775e74cd",
+      "name": "Is Booking Confirmed ?"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer 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"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: \"llama-3.3-70b-versatile\", max_tokens: 1024, temperature: 0.7, messages: [{ role: \"system\", content: \"You are a booking assistant.\\n\\nSERVICES:\\n\" + $('Prepare AI Context').first().json.productList + \"\\n\\nCustomer: \" + $('Prepare AI Context').first().json.firstName + \"\\n\\nCollect Name, Email, Date, Time then write:\\nBOOKING_CONFIRMED::\\nNAME::x\\nEMAIL::x\\nSERVICE::x\\nDATE::x\\nTIME::x\\n::END_BOOKING\" }, { role: \"user\", content: $('Prepare AI Context').first().json.text }] }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -432,
+        384
+      ],
+      "id": "1bbeaf18-6bd4-4ffc-921f-5e879c22b0f5",
+      "name": "Groq AI Response"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "Extract Message Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Message Data": {
+      "main": [
+        [
+          {
+            "node": "Get Products from Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Products from Sheet": {
+      "main": [
+        [
+          {
+            "node": "Prepare AI Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare AI Context": {
+      "main": [
+        [
+          {
+            "node": "Groq AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse AI Response": {
+      "main": [
+        [
+          {
+            "node": "Send Telegram Reply",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Is Booking Confirmed ?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save Booking to Sheet": {
+      "main": [
+        [
+          {
+            "node": "Send Confirmation Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Booking Confirmed ?": {
+      "main": [
+        [
+          {
+            "node": "Save Booking to Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq AI Response": {
+      "main": [
+        [
+          {
+            "node": "Parse AI Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "cf8578b0-5445-45e0-85f2-1069228321bf",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "594119ed60d47f842c463e5f7c361f9f1042cfed41480eafc55a23cb16823c52"
+  },
+  "id": "1XbxhKjS3DasLqTd",
+  "tags": []
+}
